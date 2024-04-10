@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 def evaluate(dataset, model, hop_length, device, pitch_th=0.03):
     metrics = defaultdict(list)
-    for data in dataset:
+    for data in tqdm(dataset):
         mel = data['mel'].to(device)
         n_frames = mel.shape[-1]
         mel = F.pad(mel, (0, 32 * ((n_frames - 1) // 32 + 1) - n_frames), mode='reflect')
@@ -46,6 +46,6 @@ def evaluate(dataset, model, hop_length, device, pitch_th=0.03):
         metrics['VFA'].append(vfa)
         metrics['VR'].append(vr)
         # if rpa < 0.9:
-        print(data['file'], ':\t', rpa, '\t', oa)
+        # print(data['file'], ':\t', rpa, '\t', oa)
 
     return metrics

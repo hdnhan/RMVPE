@@ -1,0 +1,6 @@
+librosa
+tensorboard
+torch
+torchvision
+colorednoise
+mir_eval

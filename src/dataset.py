@@ -80,7 +80,8 @@ class MIR1K(Dataset):
 
     def files(self, group):
         audio_files = glob(os.path.join(self.path, group, '*.wav'))
-        label_files = [f.replace('.wav', '.pv') for f in audio_files]
+        # label_files = [f.replace('.wav', '.pv') for f in audio_files]
+        label_files = [f.replace('.wav', '.npy') for f in audio_files]
 
         assert (all(os.path.isfile(audio_v_file) for audio_v_file in audio_files))
         assert (all(os.path.isfile(label_file) for label_file in label_files))
@@ -102,17 +103,14 @@ class MIR1K(Dataset):
         audio = np.pad(audio, (WINDOW_LENGTH, WINDOW_LENGTH), mode='reflect')
         audio = torch.from_numpy(audio).float()
         
-        cent = torch.zeros(n_frames, dtype=torch.float)
-        voice = torch.zeros(n_frames, dtype=torch.float)
-        with open(label_path, 'r') as f:
-            lines = f.readlines()
-            i = 0
-            for line in lines:
-                i += 1
-                if float(line) != 0 and i < n_frames:
-                    freq = 440 * (2.0 ** ((float(line) - 69.0) / 12.0))
-                    cent[i] = 1200 * np.log2(freq / 10)
-                    voice[i] = 1
+        freq = np.load(label_path)[:n_frames]
+        freq = np.pad(freq, (0, n_frames - len(freq)), mode='constant', constant_values=0)
+        cent = np.where(freq > 1e-2, 1200 * np.log2(freq / 10), 0)
+        voice = np.where(freq > 1e-2, 1, 0)
+
+        cent = torch.from_numpy(cent).float()
+        voice = torch.from_numpy(voice).float()
+
         self.paths.append(audio_path)
         self.data_buffer[audio_path] = {'len': n_frames, 'audio': audio, 'noise': noise, 'cent': cent, 'voice': voice}
 
