@@ -6,7 +6,15 @@ import torch.nn.functional as F
 from librosa.filters import mel
 
 from src import E2E0
-from src.constants import *
+from src.constants import (
+    N_CLASS,
+    CONST,
+    N_MELS,
+    SAMPLE_RATE,
+    WINDOW_LENGTH,
+    MEL_FMIN,
+    MEL_FMAX,
+)
 
 import torch
 
@@ -26,7 +34,12 @@ class MelSpectrogram_ONNX(nn.Module):
         super().__init__()
         n_fft = win_length if n_fft is None else n_fft
         mel_basis = mel(
-            sr=sampling_rate, n_fft=n_fft, n_mels=n_mel_channels, fmin=mel_fmin, fmax=mel_fmax, htk=True
+            sr=sampling_rate,
+            n_fft=n_fft,
+            n_mels=n_mel_channels,
+            fmin=mel_fmin,
+            fmax=mel_fmax,
+            htk=True,
         )
         mel_basis = torch.from_numpy(mel_basis).float()
         self.register_buffer("mel_basis", mel_basis)
@@ -48,7 +61,7 @@ class MelSpectrogram_ONNX(nn.Module):
             return_complex=True,
         )
         fft = torch.view_as_real(fft)
-        magnitude = torch.sqrt(torch.sum(fft ** 2, dim=-1))
+        magnitude = torch.sqrt(torch.sum(fft**2, dim=-1))
         mel_output = torch.matmul(self.mel_basis, magnitude)
         log_mel_spec = torch.log(torch.clamp(mel_output, min=self.clamp))
         return log_mel_spec
@@ -66,13 +79,19 @@ class RMVPE_ONNX(nn.Module):
 
     def mel2hidden(self, mel: torch.Tensor) -> torch.Tensor:
         n_frames = mel.shape[-1]
-        mel = F.pad(mel, (0, 32 * ((n_frames - 1) // 32 + 1) - n_frames), mode="reflect")
+        mel = F.pad(
+            mel, (0, 32 * ((n_frames - 1) // 32 + 1) - n_frames), mode="reflect"
+        )
         hidden = self.model(mel)  # [B, T, N]
         return hidden[:, :n_frames]
 
     # noinspection PyMethodMayBeStatic
-    def decode(self, hidden: torch.Tensor, threshold: float = 0.03) -> Tuple[torch.Tensor, torch.Tensor]:
-        idx = torch.arange(self.N_CLASS, device=hidden.device)[None, None, :]  # [B=1, T=1, N]
+    def decode(
+        self, hidden: torch.Tensor, threshold: float = 0.03
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        idx = torch.arange(self.N_CLASS, device=hidden.device)[
+            None, None, :
+        ]  # [B=1, T=1, N]
         idx_cents = idx * 20 + self.CONST  # [B=1, N]
         center = torch.argmax(hidden, dim=2, keepdim=True)  # [B, T, 1]
         start = torch.clip(center - 4, min=0)  # [B, T, 1]
@@ -81,12 +100,16 @@ class RMVPE_ONNX(nn.Module):
         weights = hidden * idx_mask  # [B, T, N]
         product_sum = torch.sum(weights * idx_cents, dim=2)  # [B, T]
         weight_sum = torch.sum(weights, dim=2)  # [B, T]
-        cents = product_sum / (weight_sum + (weight_sum == 0))  # avoid dividing by zero, [B, T]
+        cents = product_sum / (
+            weight_sum + (weight_sum == 0)
+        )  # avoid dividing by zero, [B, T]
         f0 = 10 * 2 ** (cents / 1200)
         uv = hidden.max(dim=2)[0] < threshold  # [B, T]
         return f0 * ~uv, uv
 
-    def forward(self, waveform: torch.Tensor, threshold: float) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, waveform: torch.Tensor, threshold: float
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         mel = self.mel_extractor(waveform, center=True)
         hidden = self.mel2hidden(mel)
         f0, uv = self.decode(hidden, threshold=threshold)
@@ -118,7 +141,9 @@ def parse_args(args=None, namespace=None):
         help="hop_length under 16khz sampling rate | default: 160",
     )
     parser.add_argument(
-        "--optimize", action="store_true", help="whether to optimize the generated ONNX graph"
+        "--optimize",
+        action="store_true",
+        help="whether to optimize the generated ONNX graph",
     )
     return parser.parse_args(args=args, namespace=namespace)
 
@@ -172,7 +197,9 @@ def export():
     rmvpe = RMVPE_ONNX(hop_length=cmd.hop_length)
     rmvpe.model.load_state_dict(torch.load(model_path)["model"])
     rmvpe.eval().to(device)
-    waveform = torch.randn(1, 114514, dtype=torch.float32, device=device).clip(min=-1.0, max=1.0)
+    waveform = torch.randn(1, 114514, dtype=torch.float32, device=device).clip(
+        min=-1.0, max=1.0
+    )
     threshold = torch.tensor(0.03, dtype=torch.float32, device=device)
     print("start exporting ...")
     with torch.no_grad():
@@ -185,7 +212,11 @@ def export():
             output_path,
             input_names=["waveform", "threshold"],
             output_names=["f0", "uv"],
-            dynamic_axes={"waveform": {1: "n_samples"}, "f0": {1: "n_frames"}, "uv": {1: "n_frames"}},
+            dynamic_axes={
+                "waveform": {1: "n_samples"},
+                "f0": {1: "n_frames"},
+                "uv": {1: "n_frames"},
+            },
             opset_version=17,
         )
     if cmd.optimize:

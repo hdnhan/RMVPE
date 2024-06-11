@@ -1,4 +1,4 @@
-from typing import Tuple, List, Optional, Union
+from typing import Tuple, List, Optional
 
 import torch
 import torch.nn as nn
@@ -6,8 +6,10 @@ from .constants import N_MELS
 
 
 class ConvBlockRes(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, momentum: float = 0.01):
-        super(ConvBlockRes, self).__init__()
+    def __init__(
+        self, in_channels: int, out_channels: int, momentum: float = 0.01
+    ) -> None:
+        super().__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(
                 in_channels=in_channels,
@@ -48,7 +50,7 @@ class ResEncoderBlock(nn.Module):
         n_blocks: int = 1,
         momentum: int = 0.01,
     ) -> None:
-        super(ResEncoderBlock, self).__init__()
+        super().__init__()
         self.n_blocks = n_blocks
         self.conv = nn.ModuleList()
         self.conv.append(ConvBlockRes(in_channels, out_channels, momentum))
@@ -70,9 +72,14 @@ class ResEncoderBlock(nn.Module):
 
 class ResDecoderBlock(nn.Module):
     def __init__(
-        self, in_channels: int, out_channels: int, stride: int, n_blocks: int = 1, momentum: float = 0.01
+        self,
+        in_channels: int,
+        out_channels: int,
+        stride: int,
+        n_blocks: int = 1,
+        momentum: float = 0.01,
     ) -> None:
-        super(ResDecoderBlock, self).__init__()
+        super().__init__()
         out_padding = (0, 1) if stride == (1, 2) else (1, 1)
         self.conv1 = nn.Sequential(
             nn.ConvTranspose2d(
@@ -111,14 +118,16 @@ class Encoder(nn.Module):
         out_channels: int = 16,
         momentum: float = 0.01,
     ):
-        super(Encoder, self).__init__()
+        super().__init__()
         self.n_encoders = n_encoders
         self.bn = nn.BatchNorm2d(in_channels, momentum=momentum)
         self.layers = nn.ModuleList()
         self.latent_channels = []
         for i in range(self.n_encoders):
             self.layers.append(
-                ResEncoderBlock(in_channels, out_channels, kernel_size, n_blocks, momentum=momentum)
+                ResEncoderBlock(
+                    in_channels, out_channels, kernel_size, n_blocks, momentum=momentum
+                )
             )
             self.latent_channels.append([out_channels, in_size])
             in_channels = out_channels
@@ -138,14 +147,23 @@ class Encoder(nn.Module):
 
 class Intermediate(nn.Module):
     def __init__(
-        self, in_channels: int, out_channels: int, n_inters: int, n_blocks: int, momentum: float = 0.01
+        self,
+        in_channels: int,
+        out_channels: int,
+        n_inters: int,
+        n_blocks: int,
+        momentum: float = 0.01,
     ) -> None:
-        super(Intermediate, self).__init__()
+        super().__init__()
         self.n_inters = n_inters
         self.layers = nn.ModuleList()
-        self.layers.append(ResEncoderBlock(in_channels, out_channels, None, n_blocks, momentum))
+        self.layers.append(
+            ResEncoderBlock(in_channels, out_channels, None, n_blocks, momentum)
+        )
         for i in range(self.n_inters - 1):
-            self.layers.append(ResEncoderBlock(out_channels, out_channels, None, n_blocks, momentum))
+            self.layers.append(
+                ResEncoderBlock(out_channels, out_channels, None, n_blocks, momentum)
+            )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
@@ -155,15 +173,19 @@ class Intermediate(nn.Module):
 
 class Decoder(nn.Module):
     def __init__(self, in_channels, n_decoders, stride, n_blocks, momentum=0.01):
-        super(Decoder, self).__init__()
+        super().__init__()
         self.layers = nn.ModuleList()
         self.n_decoders = n_decoders
         for i in range(self.n_decoders):
             out_channels = in_channels // 2
-            self.layers.append(ResDecoderBlock(in_channels, out_channels, stride, n_blocks, momentum))
+            self.layers.append(
+                ResDecoderBlock(in_channels, out_channels, stride, n_blocks, momentum)
+            )
             in_channels = out_channels
 
-    def forward(self, x: torch.Tensor, concat_tensors: List[torch.Tensor]) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, concat_tensors: List[torch.Tensor]
+    ) -> torch.Tensor:
         for i, layer in enumerate(self.layers):
             x = layer(x, concat_tensors[-1 - i])
         return x
@@ -183,26 +205,6 @@ class TimbreFilter(nn.Module):
         return out_tensors
 
 
-class DeepUnet(nn.Module):
-    def __init__(
-        self, kernel_size, n_blocks, en_de_layers=5, inter_layers=4, in_channels=1, en_out_channels=16
-    ):
-        super(DeepUnet, self).__init__()
-        self.encoder = Encoder(in_channels, N_MELS, en_de_layers, kernel_size, n_blocks, en_out_channels)
-        self.intermediate = Intermediate(
-            self.encoder.out_channel // 2, self.encoder.out_channel, inter_layers, n_blocks
-        )
-        self.tf = TimbreFilter(self.encoder.latent_channels)
-        self.decoder = Decoder(self.encoder.out_channel, en_de_layers, kernel_size, n_blocks)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x, concat_tensors = self.encoder(x)
-        x = self.intermediate(x)
-        concat_tensors = self.tf(concat_tensors)
-        x = self.decoder(x, concat_tensors)
-        return x
-
-
 class DeepUnet0(nn.Module):
     def __init__(
         self,
@@ -213,13 +215,20 @@ class DeepUnet0(nn.Module):
         in_channels: int = 1,
         en_out_channels: int = 16,
     ) -> None:
-        super(DeepUnet0, self).__init__()
-        self.encoder = Encoder(in_channels, N_MELS, en_de_layers, kernel_size, n_blocks, en_out_channels)
+        super().__init__()
+        self.encoder = Encoder(
+            in_channels, N_MELS, en_de_layers, kernel_size, n_blocks, en_out_channels
+        )
         self.intermediate = Intermediate(
-            self.encoder.out_channel // 2, self.encoder.out_channel, inter_layers, n_blocks
+            self.encoder.out_channel // 2,
+            self.encoder.out_channel,
+            inter_layers,
+            n_blocks,
         )
         self.tf = TimbreFilter(self.encoder.latent_channels)
-        self.decoder = Decoder(self.encoder.out_channel, en_de_layers, kernel_size, n_blocks)
+        self.decoder = Decoder(
+            self.encoder.out_channel, en_de_layers, kernel_size, n_blocks
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x, concat_tensors = self.encoder(x)
