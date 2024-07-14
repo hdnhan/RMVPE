@@ -20,7 +20,7 @@ config.add_argument("--lr", type=float, default=1e-4)
 
 def train(args):
     time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    args.hsize = 320
+    args.hsize = 160
     logdir = f"runs/{time}-{args.hsize}"
     os.makedirs(logdir, exist_ok=True)
     writer = SummaryWriter(logdir)
